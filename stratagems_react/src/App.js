@@ -1,5 +1,6 @@
 import React from 'react';
 import './App.css';
+// import Game from './Game_baisc';
 import Game from './Game';
 
 function App() {

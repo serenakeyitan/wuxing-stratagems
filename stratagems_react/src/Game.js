@@ -3,28 +3,56 @@ import React, { useState, useEffect, useRef } from 'react';
 const Game = () => {
     const gridSize = 10;
     const [grid, setGrid] = useState(Array(gridSize).fill(Array(gridSize).fill({ faction: null, life: 0, dead: false })));
-    const factions = ['Red', 'Blue', 'Green', 'Yellow', 'Purple']; // Evil is not a player-controlled faction
+    const factions = ['Red', 'Blue', 'Green', 'Yellow', 'Purple']; // Map - Fire, Water, Wood, Earth, Metal
     const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
     const [playerCommits, setPlayerCommits] = useState(new Array(factions.length).fill(false));
-    const [playerActions, setPlayerActions] = useState(new Array(factions.length).fill([])); // Track actions by each player
+    const [playerActions, setPlayerActions] = useState(new Array(factions.length).fill([]));
     const [zoomLevel, setZoomLevel] = useState(1);
     const [transformOrigin, setTransformOrigin] = useState('center');
     const gridRef = useRef(null);
 
+    // Element mapping
+    const elementMapping = {
+        'Red': 'Fire',
+        'Blue': 'Water',
+        'Green': 'Wood',
+        'Yellow': 'Earth',
+        'Purple': 'Metal'
+    };
+
+    const generatingCycle = {
+        'Wood': 'Fire',
+        'Fire': 'Earth',
+        'Earth': 'Metal',
+        'Metal': 'Water',
+        'Water': 'Wood'
+    };
+
+    const overcomingCycle = {
+        'Wood': 'Earth',
+        'Earth': 'Water',
+        'Water': 'Fire',
+        'Fire': 'Metal',
+        'Metal': 'Wood'
+    };
+
     const placeLand = (row, col) => {
         const selectedFaction = factions[currentPlayerIndex];
+    
+        // update the grid to reflect the new placement
         const newGrid = grid.map((r, ri) => 
-            ri === row ? r.map((c, ci) => ci === col ? { faction: selectedFaction, life: 1, dead: false } : c) : r
+            ri === row ? r.map((c, ci) => ci === col ? { faction: selectedFaction, life: 3, dead: false } : c) : r
         );
         setGrid(newGrid);
-
-        // Track the action
+    
+        // track the action during the commit phase
         setPlayerActions(actions => {
             const newActions = [...actions];
-            newActions[currentPlayerIndex] = [...newActions[currentPlayerIndex], { row, col }];
+            newActions[currentPlayerIndex] = [...newActions[currentPlayerIndex], { row, col, faction: selectedFaction }];
             return newActions;
         });
     };
+    
 
     const handleCommit = () => {
         setPlayerCommits(commits => {
@@ -33,80 +61,92 @@ const Game = () => {
             return newCommits;
         });
 
-        // Check if all players have committed
         const allCommitted = playerCommits.every(commit => commit);
         if (allCommitted) {
-            processGrid(); 
-            setPlayerCommits(new Array(factions.length).fill(false)); // Reset commit status for all players
-            setPlayerActions(new Array(factions.length).fill([])); // Reset actions
+            processGrid();
+            setPlayerCommits(new Array(factions.length).fill(false));
+            setPlayerActions(new Array(factions.length).fill([]));
         }
 
-        setCurrentPlayerIndex((prevIndex) => (prevIndex + 1) % factions.length); // Switch to the next player
+        setCurrentPlayerIndex((prevIndex) => (prevIndex + 1) % factions.length);
     };
 
-    const processGrid = () => {
-        // Find conflicts and mark them as 'Evil'
-        playerActions.forEach((actions, index) => {
-            actions.forEach(action => {
-                const { row, col } = action;
-                playerActions.forEach((otherActions, otherIndex) => {
-                    if (otherIndex !== index) {
-                        otherActions.forEach(otherAction => {
-                            if (otherAction.row === row && otherAction.col === col) {
-                                // Conflict found, mark as Evil
-                                grid[row][col] = { faction: 'Evil', life: 1, dead: false };
-                            }
-                        });
-                    }
-                });
+
+const processGrid = () => {
+
+    // detech conflicts and mark them as Evil
+    playerActions.forEach((actions, index) => {
+        actions.forEach(action => {
+            const { row, col } = action;
+            playerActions.forEach((otherActions, otherIndex) => {
+                if (otherIndex !== index) {
+                    otherActions.forEach(otherAction => {
+                        if (otherAction.row === row && otherAction.col === col) {
+                            // Conflict found, mark as Evil
+                            grid[row][col] = { faction: 'Evil', life: 1, dead: false };
+                        }
+                    });
+                }
             });
         });
+    });
+    
+    let newGrid = grid.map(row => row.map(cell => ({ ...cell })));
 
-        // updating life values
-        let newGrid = grid.map(row => row.map(cell => ({ ...cell })));
+    for (let row = 0; row < gridSize; row++) {
+        for (let col = 0; col < gridSize; col++) {
+            let currentCell = newGrid[row][col];
+            if (currentCell.dead || !currentCell.faction || currentCell.faction === 'Evil') continue;
 
-        for (let row = 0; row < gridSize; row++) {
-            for (let col = 0; col < gridSize; col++) {
-                let currentCell = grid[row][col];
-                if (currentCell.dead || !currentCell.faction) continue;
+            const currentElement = elementMapping[currentCell.faction];
+            const neighbors = [
+                { r: row - 1, c: col }, // Up
+                { r: row + 1, c: col }, // Down
+                { r: row, c: col - 1 }, // Left
+                { r: row, c: col + 1 }  // Right
+            ];
 
-                let sameFactionCount = 0, differentFactionCount = 0;
-                const neighbors = [
-                    { r: row - 1, c: col }, // Up
-                    { r: row + 1, c: col }, // Down
-                    { r: row, c: col - 1 }, // Left
-                    { r: row, c: col + 1 }, // Right
-                ];
+            neighbors.forEach(n => {
+                if (n.r >= 0 && n.r < gridSize && n.c >= 0 && n.c < gridSize) {
+                    let neighborCell = newGrid[n.r][n.c];
+                    if (neighborCell.faction && neighborCell.faction !== 'Evil') {
+                        const neighborElement = elementMapping[neighborCell.faction];
 
-                neighbors.forEach(n => {
-                    if (n.r >= 0 && n.r < gridSize && n.c >= 0 && n.c < gridSize) {
-                        let neighborCell = grid[n.r][n.c];
-                        if (neighborCell.faction) {
-                            if (neighborCell.faction === currentCell.faction) {
-                                sameFactionCount++;
-                            } else {
-                                differentFactionCount++;
-                            }
+                        // Check for Generating Cycle
+                        if (currentElement in generatingCycle && generatingCycle[currentElement] === neighborElement) {
+                            currentCell.life -= 1;
+                            neighborCell.life += 1;
                         }
+
+                        // Check for Overcoming Cycle
+                        if (currentElement in overcomingCycle && overcomingCycle[currentElement] === neighborElement) {
+                            currentCell.life += 1;
+                            neighborCell.life -= 1;
+                        }
+
+                        // TODO: maybe i shouldn't make this rule
+                        // // // Base Rule for same faction
+                        // if (neighborCell.faction === currentCell.faction) {
+                        //     currentCell.life += 1;
+                        // }
                     }
-                });
-
-                let lifeChange = sameFactionCount - differentFactionCount;
-                if (sameFactionCount === differentFactionCount) lifeChange = -1;
-
-                let newLife = Math.max(currentCell.life + lifeChange, 0);
-                newGrid[row][col].life = newLife;
-                if (newLife <= 0) newGrid[row][col].dead = true; // Land becomes dead
-                if (newLife >= 7) {
-                    // TODO: Logic for when land reaches ultimate state
                 }
+            });
+
+            // Ensure life doesn't go below 0 and mark dead if life is 0 & remove color
+            currentCell.life = Math.max(currentCell.life, 0);
+            if (currentCell.life === 0) {
+                currentCell.dead = true;
+                currentCell.faction = null; // Remove color
             }
         }
+    }
 
-        // TODO: Conflict resolution logic
+    setGrid(newGrid);
+};
 
-        setGrid(newGrid);
-    };
+    
+    
 
     useEffect(() => {
     }, [grid, playerCommits, playerActions]);
