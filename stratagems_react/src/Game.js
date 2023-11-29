@@ -61,8 +61,7 @@ const Game = () => {
             return newCommits;
         });
 
-        const allCommitted = playerCommits.every(commit => commit);
-        if (allCommitted) {
+        if (currentPlayerIndex === factions.length - 1) {
             processGrid();
             setPlayerCommits(new Array(factions.length).fill(false));
             setPlayerActions(new Array(factions.length).fill([]));
